@@ -1,0 +1,25 @@
+[package]
+name = "xq-link"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "External window linking skeleton for the Xiangqi assistant."
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = []
+rotate = []
+gpu = []
+
+[dependencies]
+xq-core = { path = "../xq-core" }
+xq-vision = { path = "../xq-vision" }
+anyhow.workspace = true
+tracing.workspace = true
+xcap.workspace = true
+enigo.workspace = true

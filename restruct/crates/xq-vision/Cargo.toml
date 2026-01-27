@@ -1,0 +1,37 @@
+[package]
+name = "xq-vision"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Vision pipeline skeleton for the Xiangqi assistant."
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = []
+rotate = []
+gpu = []
+
+[dependencies]
+xq-core = { path = "../xq-core" }
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+ndarray.workspace = true
+xcap.workspace = true
+
+[target.'cfg(target_os = "windows")'.dependencies]
+ort = { version = "=2.0.0-rc.9", default-features = false, features = ["ndarray", "load-dynamic"] }
+ort-sys = { version = "=2.0.0-rc.9" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+ort = { version = "=2.0.0-rc.9", features = ["coreml"] }
+ort-sys = { version = "=2.0.0-rc.9" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ort = { version = "=2.0.0-rc.9", features = ["cuda", "load-dynamic"] }
+ort-sys = { version = "=2.0.0-rc.9" }
