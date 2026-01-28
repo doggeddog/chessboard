@@ -17,6 +17,7 @@ gpu = []
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+iced.workspace = true
 
 xq-core = { path = "../xq-core" }
 xq-vision = { path = "../xq-vision" }

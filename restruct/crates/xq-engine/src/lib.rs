@@ -1,6 +1,7 @@
 //! xq-engine: 引擎抽象、协议适配与进程管理（实施计划 Step 3）。
 
 mod adapter;
+mod chessdb;
 mod parser;
 mod process;
 mod profile;
@@ -9,6 +10,7 @@ mod uci;
 mod ucci;
 
 pub use adapter::{create_engine, EngineAdapter, EngineBestMove, EngineEvent, EngineInfo, EngineScore};
+pub use chessdb::{query_chessdb, ChessDbHit, ChessDbResponse};
 pub use profile::{EngineOption, EngineOptions, EngineProfile, SearchParams};
 pub use protocol::EngineProtocol;
 pub use uci::UciAdapter;
