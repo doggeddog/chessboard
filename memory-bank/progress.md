@@ -217,3 +217,42 @@
 
 边界约束：
 - 按用户要求：到此为止，不进入 Step 6（xq-app）。
+
+---
+
+## 已完成：实施计划 Step 6（xq-app iced UI + 模式系统最小可用）
+
+完成内容（主要落地在 `restruct/crates/xq-app/src/`）：
+- iced UI 主布局（6.1）：
+  - 顶部工具栏 + 棋盘区域 + 右侧侧栏（分析/棋谱/提示）；
+  - 模式切换、学习提示开关、侧栏折叠。
+- 棋盘组件（6.2）：
+  - 改为 `canvas` 绘制，棋子落在**交叉点**（而非格子内）；
+  - 绘制棋盘线、河界断线、九宫斜线；
+  - 选中/推荐走法高亮、连线模式自动同步方向（识别视角翻转）。
+- 模式与生命周期（6.3）：
+  - 模式切换时清理状态；连线模式退出即停止连线；
+  - 人机对弈/AI vs AI 的回合控制逻辑已接通。
+- 引擎与云库串联（对齐 Step 3/3.5 规划）：
+  - 侧栏“分析”区集成引擎/云库开关；
+  - 云库（chessdb）优先命中，失败自动回退本地引擎；
+  - 引擎用于提示、AI 落子、连线分析的最小可用结果。
+- 连线入口（对齐 Step 5/6 规划）：
+  - 侧栏提供“窗口列表选择/刷新/开始/停止连线”；
+  - 连线启动后周期识别并更新棋盘；
+  - 连线对战模式下支持本地走子 → 注入外部窗口 → 确认回写；
+  - macOS 输入权限检测与提示已接入。
+
+新增/调整文件：
+- `restruct/crates/xq-app/src/app.rs`：UI、棋盘 canvas、引擎/云库/连线逻辑汇总。
+- `restruct/crates/xq-app/src/resources.rs`：资源路径与对外访问。
+- `restruct/crates/xq-engine/src/chessdb.rs`：云库查询实现（无额外依赖，基于 TcpStream）。
+- `restruct/crates/xq-engine/src/lib.rs`：导出 chessdb 接口。
+- `restruct/Cargo.toml`：`iced` 启用 `canvas` 特性。
+
+验证说明（离线模式）：
+- `cargo check --offline -p xq-app --manifest-path restruct/Cargo.toml`
+- 用户已确认测试通过（“Confirmed”）。
+
+边界约束：
+- 按用户要求：到此为止，不进入 Step 7（棋谱与局势曲线）。另：引擎/连线为最小可用串联，后续需继续完善 UI 与策略细节。
