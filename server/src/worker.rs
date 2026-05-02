@@ -13,7 +13,9 @@ use xcap::image::Rgba;
 
 use crate::chess;
 use crate::common;
+use crate::engine::chessdb;
 use crate::engine::QueryResult;
+use crate::engine::QueryState;
 use crate::listen::ListenWindow;
 use crate::listen::Window;
 use crate::yolo::predict;
@@ -85,16 +87,53 @@ impl AnalysisContext {
         false
     }
 
-    // 分析棋盘并返回结果
+    // 分析棋盘并返回结果（流式推送每个深度的 info 到前端）
     fn analyze_board(&mut self, camp: &chess::Camp, board: [[char; 9]; 10]) -> Option<BoardAnalysisResult> {
         let fen = chess::board_fen(camp, board);
-        let config = SHARED_STATE.get().unwrap().config.read().unwrap();
+        let engine_config = SHARED_STATE.get().unwrap().config.read().unwrap().engine;
+
+        // 1. 先查云库
+        if engine_config.chessdb_enabled {
+            let cloud_result = block_on(chessdb::query(&fen, engine_config.chessdb_timeout));
+            match cloud_result.state {
+                QueryState::Success => {
+                    if cloud_result.pvs.is_empty() {
+                        return None;
+                    }
+                    let (expect_move, expect_board) = analyse(&self.app, cloud_result, board);
+                    return Some(BoardAnalysisResult { expect_move, expect_board });
+                }
+                QueryState::InvalidBoard => return None,
+                _ => {}
+            }
+        }
+
+        // 2. 用引擎流式搜索
         let state = SHARED_STATE.get().unwrap();
         let mut engine = state.engine.lock().unwrap();
-        let result = block_on(engine.search(&fen, &config.engine));
-        result.as_ref()?;
+        engine.position(&fen);
 
-        let (expect_move, expect_board) = analyse(&self.app, result.unwrap(), board);
+        let app = self.app.clone();
+        let result = engine.go_streaming(
+            engine_config.depth,
+            engine_config.time,
+            board,
+            |info| {
+                if let Err(e) = app.emit("analyse", info) {
+                    error!("emit analyse event failed: {}", e);
+                }
+            },
+        );
+
+        if result.pvs.is_empty() {
+            return None;
+        }
+
+        let best_pv = result.pvs.first().unwrap();
+        let expect_board = chess::board_move(board, best_pv);
+        let expect_move = chess::Changed::from_pv(best_pv, board);
+        info!("最终分析结果 depth={} score={}", result.depth, result.score);
+
         Some(BoardAnalysisResult { expect_move, expect_board })
     }
 

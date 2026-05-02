@@ -138,10 +138,10 @@ pub fn board_diff(old_board: [[char; 9]; 10], board: [[char; 9]; 10]) -> (Change
 }
 
 pub struct Move {
-    from_x: usize,
-    from_y: usize,
-    to_x: usize,
-    to_y: usize,
+    pub from_x: usize,
+    pub from_y: usize,
+    pub to_x: usize,
+    pub to_y: usize,
 }
 
 impl Move {

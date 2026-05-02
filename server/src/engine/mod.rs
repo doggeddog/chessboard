@@ -9,15 +9,20 @@ mod command;
 use tracing::debug;
 use tracing::trace;
 
+use crate::chess;
+
 #[derive(Debug, serde::Serialize, Default, Clone)]
 pub struct QueryResult {
-    pub depth: usize,       // 深度
-    pub score: isize,       // 得分
-    pub time: usize,        // 时间
-    pub pvs: Vec<String>,   // 思考(iccs)
-    pub moves: Vec<String>, // 思考(chinese)
-    pub state: QueryState,  // 状态
-    pub source: String,     // 来源
+    pub depth: usize,              // 深度
+    pub score: isize,              // 得分
+    pub time: usize,               // 时间(ms)
+    pub nodes: u64,                // 搜索节点数
+    pub nps: u64,                  // 每秒节点数
+    pub wdl: Option<[u16; 3]>,     // 胜/和/负概率 (per mille)
+    pub pvs: Vec<String>,          // 思考(iccs)
+    pub moves: Vec<String>,        // 思考(chinese)
+    pub state: QueryState,         // 状态
+    pub source: String,            // 来源
 }
 
 const SOURCE_ENGINE: &str = "引擎";
@@ -118,6 +123,12 @@ impl Engine {
                     "time" => {
                         result.time = iter.next().unwrap().parse().unwrap();
                     }
+                    "nodes" => {
+                        result.nodes = iter.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                    }
+                    "nps" => {
+                        result.nps = iter.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                    }
                     "score" => match iter.next().unwrap() {
                         "cp" => {
                             result.score = iter.next().unwrap().parse().unwrap();
@@ -128,6 +139,12 @@ impl Engine {
                         }
                         _ => {}
                     },
+                    "wdl" => {
+                        let w = iter.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                        let d = iter.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                        let l = iter.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+                        result.wdl = Some([w, d, l]);
+                    }
                     "pv" => loop {
                         if let Some(pv) = iter.next() {
                             result.pvs.push(pv.to_string());
@@ -143,39 +160,62 @@ impl Engine {
         }
     }
 
-    fn bestmove(&mut self, depth: usize, time: usize) -> String {
+    /// 流式引擎搜索：每收到一行 info 就调用 on_info 回调，
+    /// board 用于将 PV 的 ICCS 走法翻译为中文。
+    pub fn go_streaming<F>(
+        &mut self,
+        depth: usize,
+        time: usize,
+        board: [[char; 9]; 10],
+        mut on_info: F,
+    ) -> QueryResult
+    where
+        F: FnMut(&QueryResult),
+    {
         self.write_command(format!("go depth {} movetime {}", depth, time));
-        let mut pre_line = String::new();
+        let mut final_result = QueryResult::default();
+        final_result.source = SOURCE_ENGINE.to_string();
+
         loop {
             let line = self.read_line();
             if line.starts_with("bestmove") {
-                trace!("{}", pre_line);
+                trace!("{}", line);
                 break;
             }
-            pre_line = line;
-        }
-        pre_line
-    }
+            if line.starts_with("info") && line.contains(" pv ") {
+                let mut result = QueryResult::default();
+                self.parse_line(line, &mut result);
 
-    pub async fn search(&mut self, fen: &str, params: &EngineConfig) -> Option<QueryResult> {
-        let mut result = if params.chessdb_enabled {
-            // 先查询云库
-            chessdb::query(fen, params.chessdb_timeout).await
-        } else {
-            QueryResult::default()
-        };
+                let mut tmp_board = board;
+                for pv in &result.pvs {
+                    if let Some(chinese) = Self::try_translate_pv(tmp_board, pv) {
+                        result.moves.push(chinese);
+                        tmp_board = chess::board_move(tmp_board, pv);
+                    } else {
+                        break;
+                    }
+                }
 
-        match result.state {
-            QueryState::Success => Some(result),
-            QueryState::InvalidBoard => None,
-            QueryState::ServerInternalError | QueryState::NotResult => {
-                // 查询云库失败调用引擎
-                self.position(fen);
-                let best_line = self.bestmove(params.depth, params.time);
-                self.parse_line(best_line, &mut result);
-                Some(result)
+                on_info(&result);
+                final_result = result;
             }
         }
+
+        final_result
+    }
+
+    fn try_translate_pv(board: [[char; 9]; 10], pv: &str) -> Option<String> {
+        if pv.len() != 4 {
+            return None;
+        }
+        let mv = chess::Move::new(pv);
+        if mv.from_y >= 10 || mv.from_x >= 9 || mv.to_y >= 10 || mv.to_x >= 9 {
+            return None;
+        }
+        if board[mv.from_y][mv.from_x] == ' ' {
+            return None;
+        }
+        Some(chess::board_move_chinese(board, pv))
     }
 }
 
@@ -205,14 +245,17 @@ mod tests {
         info!("{:?}", result);
     }
 
-    #[tokio::test]
-    async fn test_engine() {
+    #[test]
+    fn test_engine() {
         logger::init_tracer(Level::TRACE, &std::path::PathBuf::from("."));
         let fen = "4k4/9/6r2/9/9/9/9/9/4A4/4K4 w";
         let libs = path::PathBuf::from("/Users/atopx/script/chessboard/libs");
         let mut eng = Engine::new(&libs);
-        let cfg = EngineConfig { chessdb_enabled: false, ..Default::default() };
-        let records = eng.search(fen, &cfg).await;
-        info!("{:?}", records);
+        let board = chess::fen_to_board(fen);
+        eng.position(fen);
+        let result = eng.go_streaming(20, 5000, board, |info| {
+            info!("depth={} score={} nps={}", info.depth, info.score, info.nps);
+        });
+        info!("{:?}", result);
     }
 }

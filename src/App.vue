@@ -13,9 +13,7 @@ import Toolbar from "./components/Toolbar.vue";
                 <Chessboard class="app-board" />
                 <Analyse class="app-analyse" />
             </div>
-            <div class="app-footer">
-                <a href="https://github.com/atopx/chessboard.git">atopx: 中国象棋学习工具, 开源免费</a>
-            </div>
+            <div class="app-footer"></div>
         </div>
     </n-dialog-provider>
 </template>
