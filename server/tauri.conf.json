@@ -14,12 +14,14 @@
         "windows": [
             {
                 "title": "中国象棋",
-                "width": 660,
-                "height": 580,
-                "resizable": false,
+                "width": 750,
+                "height": 620,
+                "minWidth": 600,
+                "minHeight": 480,
+                "resizable": true,
                 "hiddenTitle": true,
                 "fullscreen": false,
-                "maximizable": false
+                "maximizable": true
             }
         ],
         "security": {

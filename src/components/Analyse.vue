@@ -37,12 +37,7 @@ listen('analyse', async (event) => {
     best.value.depth = data.depth;
     best.value.score = data.score;
 
-    // 设置b-select
-    let pv = data.pvs[0];
-    let from = pv.substring(0, 2);
-    let to = pv.substring(2, 4)
-    document.getElementById(from)?.classList.add("b-select");
-    document.getElementById(to)?.classList.add("b-select");
+    // TODO: 后续使用 vschess API 绘制箭头标示建议走法
 })
 
 
@@ -75,9 +70,7 @@ const logInstRef = ref<LogInst | null>(null)
 }
 
 .textlog {
-    width: 260px;
-    height: 440px;
-    left: 400px;
-    top: 0px;
+    width: 100%;
+    height: 100%;
 }
 </style>

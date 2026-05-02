@@ -1,137 +1,186 @@
 <script setup lang="ts">
 
-import { emit, listen } from "@tauri-apps/api/event";
-import { computed, onMounted, ref } from "vue";
+import { listen } from "@tauri-apps/api/event";
+import { onMounted, onUnmounted, ref } from "vue";
 
-import "../assets/css/chessboard.css";
-
+declare const vschess: any;
 
 interface Position {
-    piece: string,
-    pos: string,
+    piece: string;
+    pos: string;
 }
 
 interface Changed {
-    piece: string,
-    from: string,
-    to: string,
-    camp: string,
+    piece: string;
+    from: string;
+    to: string;
+    camp: string;
 }
 
+const BOARD_W = 380;
+const BOARD_H = 420;
 
-const startpos: Position[] = [
-    { piece: "R", pos: "a0" },
-    { piece: "N", pos: "b0" },
-    { piece: "B", pos: "c0" },
-    { piece: "A", pos: "d0" },
-    { piece: "K", pos: "e0" },
-    { piece: "A", pos: "f0" },
-    { piece: "B", pos: "g0" },
-    { piece: "N", pos: "h0" },
-    { piece: "R", pos: "i0" },
-    { piece: "C", pos: "b2" },
-    { piece: "C", pos: "h2" },
-    { piece: "P", pos: "a3" },
-    { piece: "P", pos: "c3" },
-    { piece: "P", pos: "e3" },
-    { piece: "P", pos: "g3" },
-    { piece: "P", pos: "i3" },
-    { piece: "r", pos: "a9" },
-    { piece: "n", pos: "b9" },
-    { piece: "b", pos: "c9" },
-    { piece: "a", pos: "d9" },
-    { piece: "k", pos: "e9" },
-    { piece: "a", pos: "f9" },
-    { piece: "b", pos: "g9" },
-    { piece: "n", pos: "h9" },
-    { piece: "r", pos: "i9" },
-    { piece: "c", pos: "b7" },
-    { piece: "c", pos: "h7" },
-    { piece: "p", pos: "a6" },
-    { piece: "p", pos: "c6" },
-    { piece: "p", pos: "e6" },
-    { piece: "p", pos: "g6" },
-    { piece: "p", pos: "i6" },
-];
+const board = ref<string[][]>(
+    Array.from({ length: 10 }, () => Array(9).fill(" "))
+);
 
-// 设置棋子的函数
-async function setPiecesOnBoard(pieces: Position[]) {
-    // 遍历棋子位置，并在棋盘上创建对应的棋子元素
-    for (let index = 0; index < pieces.length; index++) {
-        const record = pieces[index];
-        let ele = document.getElementById(record.pos)?.firstElementChild;
+const scale = ref(1);
+const scaledW = ref(BOARD_W);
+const scaledH = ref(BOARD_H);
+const container = ref<HTMLElement | null>(null);
+let chess: any = null;
+let resizeObserver: ResizeObserver | null = null;
 
-        // 移除 select
-        document.querySelectorAll(".b-select").forEach(element => {
-            element.classList.remove("b-select")
-        });
+function posToIndex(pos: string): [number, number] {
+    const col = pos.charCodeAt(0) - "a".charCodeAt(0);
+    const row = parseInt(pos[1]);
+    return [row, col];
+}
 
-        // 移除坐标原棋子
-        ele?.classList.forEach(cls => {
-            if (cls != "piece") {
-                ele?.classList.remove(cls)
+function boardToFen(): string {
+    const rows: string[] = [];
+    for (let row = 9; row >= 0; row--) {
+        let fenRow = "";
+        let emptyCount = 0;
+        for (let col = 0; col < 9; col++) {
+            const piece = board.value[row][col];
+            if (piece === " ") {
+                emptyCount++;
+            } else {
+                if (emptyCount > 0) {
+                    fenRow += emptyCount;
+                    emptyCount = 0;
+                }
+                fenRow += piece;
             }
-        });
-        // 添加新棋子
-        if (record.piece != " ") {
-            ele?.classList.add(`piece-${record.piece}`);
         }
+        if (emptyCount > 0) {
+            fenRow += emptyCount;
+        }
+        rows.push(fenRow);
     }
+    return rows.join("/") + " w - - 0 1";
 }
 
-onMounted(async () => {
-    await emit('position', startpos)
-})
+function syncToVschess() {
+    if (!chess) return;
+    const fen = boardToFen();
+    chess.setNode({ fen: fen, comment: "", next: [], defaultIndex: 0 });
+    chess.rebuildSituation();
+    chess.setBoardByStep(0);
+}
 
-const mirror = ref(false);
+function updateScale() {
+    if (!container.value) return;
+    const h = container.value.clientHeight;
+    const s = h / BOARD_H;
+    scale.value = Math.max(Math.min(s, 1.5), 0.5);
+    scaledW.value = Math.round(BOARD_W * scale.value);
+    scaledH.value = Math.round(BOARD_H * scale.value);
+}
 
-const wrappedItems = computed(() => {
-    if (mirror.value) {
-        return [{ id: 'i0' }, { id: 'h0' }, { id: 'g0' }, { id: 'f0' }, { id: 'e0' }, { id: 'd0' }, { id: 'c0' }, { id: 'b0' }, { id: 'a0' }, { id: 'i1' }, { id: 'h1' }, { id: 'g1' }, { id: 'f1' }, { id: 'e1' }, { id: 'd1' }, { id: 'c1' }, { id: 'b1' }, { id: 'a1' }, { id: 'i2' }, { id: 'h2' }, { id: 'g2' }, { id: 'f2' }, { id: 'e2' }, { id: 'd2' }, { id: 'c2' }, { id: 'b2' }, { id: 'a2' }, { id: 'i3' }, { id: 'h3' }, { id: 'g3' }, { id: 'f3' }, { id: 'e3' }, { id: 'd3' }, { id: 'c3' }, { id: 'b3' }, { id: 'a3' }, { id: 'i4' }, { id: 'h4' }, { id: 'g4' }, { id: 'f4' }, { id: 'e4' }, { id: 'd4' }, { id: 'c4' }, { id: 'b4' }, { id: 'a4' }, { id: 'i5' }, { id: 'h5' }, { id: 'g5' }, { id: 'f5' }, { id: 'e5' }, { id: 'd5' }, { id: 'c5' }, { id: 'b5' }, { id: 'a5' }, { id: 'i6' }, { id: 'h6' }, { id: 'g6' }, { id: 'f6' }, { id: 'e6' }, { id: 'd6' }, { id: 'c6' }, { id: 'b6' }, { id: 'a6' }, { id: 'i7' }, { id: 'h7' }, { id: 'g7' }, { id: 'f7' }, { id: 'e7' }, { id: 'd7' }, { id: 'c7' }, { id: 'b7' }, { id: 'a7' }, { id: 'i8' }, { id: 'h8' }, { id: 'g8' }, { id: 'f8' }, { id: 'e8' }, { id: 'd8' }, { id: 'c8' }, { id: 'b8' }, { id: 'a8' }, { id: 'i9' }, { id: 'h9' }, { id: 'g9' }, { id: 'f9' }, { id: 'e9' }, { id: 'd9' }, { id: 'c9' }, { id: 'b9' }, { id: 'a9' }];
-
-    } else {
-        return [{ id: 'a9' }, { id: 'b9' }, { id: 'c9' }, { id: 'd9' }, { id: 'e9' }, { id: 'f9' }, { id: 'g9' }, { id: 'h9' }, { id: 'i9' }, { id: 'a8' }, { id: 'b8' }, { id: 'c8' }, { id: 'd8' }, { id: 'e8' }, { id: 'f8' }, { id: 'g8' }, { id: 'h8' }, { id: 'i8' }, { id: 'a7' }, { id: 'b7' }, { id: 'c7' }, { id: 'd7' }, { id: 'e7' }, { id: 'f7' }, { id: 'g7' }, { id: 'h7' }, { id: 'i7' }, { id: 'a6' }, { id: 'b6' }, { id: 'c6' }, { id: 'd6' }, { id: 'e6' }, { id: 'f6' }, { id: 'g6' }, { id: 'h6' }, { id: 'i6' }, { id: 'a5' }, { id: 'b5' }, { id: 'c5' }, { id: 'd5' }, { id: 'e5' }, { id: 'f5' }, { id: 'g5' }, { id: 'h5' }, { id: 'i5' }, { id: 'a4' }, { id: 'b4' }, { id: 'c4' }, { id: 'd4' }, { id: 'e4' }, { id: 'f4' }, { id: 'g4' }, { id: 'h4' }, { id: 'i4' }, { id: 'a3' }, { id: 'b3' }, { id: 'c3' }, { id: 'd3' }, { id: 'e3' }, { id: 'f3' }, { id: 'g3' }, { id: 'h3' }, { id: 'i3' }, { id: 'a2' }, { id: 'b2' }, { id: 'c2' }, { id: 'd2' }, { id: 'e2' }, { id: 'f2' }, { id: 'g2' }, { id: 'h2' }, { id: 'i2' }, { id: 'a1' }, { id: 'b1' }, { id: 'c1' }, { id: 'd1' }, { id: 'e1' }, { id: 'f1' }, { id: 'g1' }, { id: 'h1' }, { id: 'i1' }, { id: 'a0' }, { id: 'b0' }, { id: 'c0' }, { id: 'd0' }, { id: 'e0' }, { id: 'f0' }, { id: 'g0' }, { id: 'h0' }, { id: 'i0' }];
-    }
-});
-
-listen('mirror', async (event) => {
-    mirror.value = event.payload as boolean;
-})
-
-listen('position', async (event) => {
-    let pos = event.payload as Position[];
-    await setPiecesOnBoard(pos);
-})
-
-listen('move', async (event) => {
-    let change = event.payload as Changed;
-    let token = `piece-${change.piece}`;
-
-    // 移除 select
-    document.querySelectorAll(".b-select").forEach(element => {
-        element.classList.remove("b-select")
+onMounted(() => {
+    chess = new vschess.load("#vschess-board", {
+        clickResponse: 0,
+        sound: false,
+        moveTips: false,
+        saveTips: false,
     });
 
-    // 原坐标移除棋子
-    document.getElementById(change.from)?.firstElementChild?.classList.remove(token);
+    updateScale();
+    resizeObserver = new ResizeObserver(updateScale);
+    if (container.value) resizeObserver.observe(container.value);
 
-    // 移除目标坐标棋子
-    let ele = document.getElementById(change.to)?.firstElementChild;
-    ele?.classList.forEach(cls => {
-        if (cls != "piece") {
-            ele?.classList.remove(cls)
+    listen("position", async (event) => {
+        const positions = event.payload as Position[];
+        for (let r = 0; r < 10; r++)
+            for (let c = 0; c < 9; c++) board.value[r][c] = " ";
+        for (const p of positions) {
+            if (p.piece !== " ") {
+                const [row, col] = posToIndex(p.pos);
+                board.value[row][col] = p.piece;
+            }
+        }
+        syncToVschess();
+    });
+
+    listen("move", async (event) => {
+        const change = event.payload as Changed;
+        const [fromRow, fromCol] = posToIndex(change.from);
+        const [toRow, toCol] = posToIndex(change.to);
+        board.value[fromRow][fromCol] = " ";
+        board.value[toRow][toCol] = change.piece;
+        syncToVschess();
+    });
+
+    listen("mirror", async (event) => {
+        const isMirror = event.payload as boolean;
+        if (chess) {
+            chess.setTurn(isMirror ? 2 : 0);
         }
     });
-
-    // 目标坐标添加棋子
-    document.getElementById(change.to)?.firstElementChild?.classList.add(token);
 });
 
+onUnmounted(() => {
+    resizeObserver?.disconnect();
+});
 </script>
 
 <template>
-    <div id="chessboard">
-        <div v-for="(item, _) in wrappedItems" :key="item.id" :id="item.id" class="piece-wrap"><span
-                class="piece"></span></div>
+    <div ref="container" class="board-container">
+        <div
+            class="board-sizer"
+            :style="{
+                width: scaledW + 'px',
+                height: scaledH + 'px',
+            }"
+        >
+            <div
+                class="board-scaler"
+                :style="{ transform: `scale(${scale})` }"
+            >
+                <div id="vschess-board"></div>
+            </div>
+        </div>
     </div>
 </template>
+
+<style>
+.board-container {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.board-sizer {
+    position: relative;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 4px;
+}
+
+.board-scaler {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform-origin: top left;
+}
+
+/* vschess overrides */
+.vschess-loaded {
+    width: 380px !important;
+    height: 420px !important;
+    padding: 0 !important;
+    border: none !important;
+}
+
+.vschess-loaded > *:not(.vschess-board) {
+    display: none !important;
+}
+
+.vschess-board {
+    top: 0 !important;
+    left: 0 !important;
+}
+</style>
